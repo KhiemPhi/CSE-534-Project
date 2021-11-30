@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 import scipy.io
 import numpy as np
 
-class WhataboutismDatasetSiamese(Dataset):
+class WebSaliencyDataset(Dataset):
 
     def __init__(self, matlab_path, json_path, imgs_dir, saliency_dir):
         super().__init__()
@@ -18,12 +18,8 @@ class WhataboutismDatasetSiamese(Dataset):
 
         #2. Parse the JSON file to get the correct annotations, we build a list of tuple that goes:
         # file_name, img, seg map, saliency map 
-        
 
-
-
-
-
+        self.dataset = []     
 
     def process_eccv_data(self):
 
@@ -48,7 +44,10 @@ class WhataboutismDatasetSiamese(Dataset):
 
             category_count[str(i)] += 1
             count = str(category_count[str(i)])
+
             basename = 'eccv_2015_{}_{}.jpg'.format(category[0], count), web_jpg
+
+            # grab the region annotations + build segm map
 
  
 

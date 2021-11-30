@@ -1,9 +1,12 @@
 # Module to train the base model, let's set up the dataset first by reading the json + matlab files
 import argparse
+from dataset import WebSaliencyDataset
 
 
 def main(args):
     print("----------- Web-Saliency Model ECCCV 2015 -------------")
+
+    #1. Grab the dataset 
 
 
 if __name__ == "__main__":
