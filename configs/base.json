@@ -1,6 +1,7 @@
 {
     "annotations_path": ["annotations/tanmay_2.json"],
     "saliency_path":  ["fdm_websaliency"],
-    "imgs_dir": ["homepages"]
+    "imgs_dir": ["homepages"],
+    "matlab_path":"dataset.mat"
 
 }

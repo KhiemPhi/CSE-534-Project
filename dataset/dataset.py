@@ -47,7 +47,16 @@ class WebSaliencyDataset(Dataset):
 
             basename = 'eccv_2015_{}_{}.jpg'.format(category[0], count), web_jpg
 
-            # grab the region annotations + build segm map
+            # TODO: grab the region annotations + build segm map
+    
+    def __len__(self):
+        """
+        Overwrite the len function to get the number of images in the dataset
+        """
+        return len(self.dataset)
+        
+    def __getitem__(self, idx:int):
+        return self.dataset[idx]
 
  
 
