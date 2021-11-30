@@ -1,0 +1,5 @@
+{
+    "annotations_path": ["annotations/tanmay_2.json"],
+    "saliency_path1":  ["fdm_websaliency"]
+
+}
