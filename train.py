@@ -1,12 +1,24 @@
 # Module to train the base model, let's set up the dataset first by reading the json + matlab files
 import argparse
 from dataset import WebSaliencyDataset
+import json
+
+def read_cfgs(cfg):
+
+    cfg_file = open(cfg)
+    cfg_dict = json.load(cfg_file)
+
+    return cfg_dict
 
 
 def main(args):
     print("----------- Web-Saliency Model ECCCV 2015 -------------")
 
-    #1. Grab the dataset 
+    #1. Grab the dataset object based on json inputs
+    cfg = read_cfgs(args.config)
+
+
+    #full_dataset = WebSaliencyDataset(matlab_path=, json_path=, imgs_dir=, saliency_dir=)
 
 
 if __name__ == "__main__":

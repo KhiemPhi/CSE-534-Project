@@ -1,1 +1,1 @@
-from dataset import WebSaliencyDataset
+from .dataset import WebSaliencyDataset
