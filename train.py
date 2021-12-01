@@ -12,7 +12,7 @@ def read_cfgs(cfg):
 
 
 def main(args):
-    print("----------- Web-Saliency Model ECCCV 2015 -------------")
+    print("----------- Web-Saliency Model ECCV 2015 -------------")
     #1. Grab the dataset object based on json inputs
     cfg = read_cfgs(args.config)    
     full_dataset = WebSaliencyDataset(matlab_path=cfg["matlab_path"], json_path=cfg["annotations_path"], imgs_dir=cfg["imgs_dir"], saliency_dir=cfg["saliency_path"])

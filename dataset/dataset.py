@@ -5,13 +5,17 @@ import json
 import os
 import cv2
 import imgviz
+from visualizer import get_sal_map, generate_mask_from_bbox
+from tqdm import tqdm
+
+from visualizer.vis_utils import visualize_seg_map
 
 
 sepearate_dataset_key = "eccv"
-website_type_dict = {1:"Shopping",2:"Browsing",3:"Form Filling",4:"Signing up", 5:"General"}
+website_type_dict = {1:"email",2:"fileshare",3:"job",4:"product", 5:"shopping", 6:"social", 7:"general"}
+website_type_dict_reverse = {value: key for key, value in website_type_dict.items()}
 website_element_dict = {"Background":0, "Button":1, "Text":2, "Input Field":3, "Image":4}
-
-website_element_dict_reverse = {0:"Background", 1:"Button", 2:"Text", 3:"Input Field", 4:"Image"}
+website_element_dict_reverse = {value: key for key, value in website_element_dict.items()}
 
 
 class WebSaliencyDataset(Dataset):
@@ -40,88 +44,80 @@ class WebSaliencyDataset(Dataset):
         self.process_eccv_data()
         self.process_annotations()
     
+    def form_seg_map(self, annotation, saliency_map):
+        if len(annotation["regions"]) == 0: 
+            seg_map = np.zeros_like(saliency_map) # empty seg map
+        else: 
+            regions = annotation["regions"]
+            seg_map = np.zeros_like(saliency_map) # empty seg map
+            seg_map = generate_mask_from_bbox(regions, seg_map, website_element_dict)
+                
+        
+        return seg_map
+    
     def process_annotations(self):
 
         annotation_file = open(self.json_path)
         annotation_dict = json.load(annotation_file)
 
-        for annotation in annotation_dict.values():
+        for annotation in tqdm(annotation_dict.values()):
             if sepearate_dataset_key in annotation["filename"]:
                 # ---> processs eccv data differently
-                pass 
+                idx = self.name_to_items_eecv[annotation["filename"]] 
+                webpage = self.eccv_data[idx]
+
+                website_img = webpage[0]
+                web_eye_gaze = webpage[1].squeeze(0)[0]
+                category = webpage[3][0]           
+
+                H, W, _ = website_img.shape                
+                web_eye_gaze = web_eye_gaze -  web_eye_gaze.min()
+                web_eye_gaze = web_eye_gaze / web_eye_gaze.max()
+                web_eye_gaze[:,0] *= W
+                web_eye_gaze[:,1] *= H
+            
+                saliency_map = get_sal_map(web_eye_gaze, H, W)
+                website_type = np.zeros(shape=len(website_type_dict.keys()))
+                website_type[website_type_dict_reverse[category]] = 1
+                seg_map = self.form_seg_map(annotation, saliency_map)
+                self.dataset.append( (annotation["filename"], website_img, seg_map, saliency_map, website_type)  )
+            
             else: 
                 # ----> souradeep dataset                
-                website_type = np.array([0,0,0,0,1]) # one hot encoding for 5
+                website_type = np.array([0,0,0,0,0,0,1]) # one hot encoding for 7
                 website_path = os.path.join(self.imgs_dir, annotation["filename"])
                 saliency_map_path = os.path.join(self.saliency_dir, annotation["filename"])
                 saliency_map = cv2.imread(saliency_map_path, flags=cv2.IMREAD_GRAYSCALE)
                 website_img = cv2.imread(website_path)
-
-                # Now build the seg-map
-                if len(annotation["regions"]) == 0: 
-                    seg_map = np.zeros_like(saliency_map) # empty seg map
-                else: 
-                    regions = annotation["regions"]
-                    seg_map = np.zeros_like(saliency_map) # empty seg map
-                    region_names = []
-                    region_labels = []
-
-                    for i in regions:
-                        try:
-                            mask_value = website_element_dict[i["region_attributes"]["Object Type"]]
-                            
-                            x_min = i["shape_attributes"]["x"]
-                            y_min = i["shape_attributes"]["y"]
-                            x_max = x_min + i["shape_attributes"]["width"]
-                            y_max = y_min + i["shape_attributes"]["height"]
-                            seg_map[y_min:y_max, x_min:x_max] = mask_value # coordinate system from Annotation Tool and Numpy is different
-
-                            region_names.append(i["region_attributes"]["Object Type"])
-                            region_labels.append(mask_value)                           
-                        except:
-                            pass # do not add these annotations
-                     
-                    if self.vis:
-                       
-                        label_names = ["Background", "Button", "Text", "Input Field", "Image"]
-                       
-                        labelviz_withname1 = imgviz.label2rgb(seg_map, label_names=label_names, font_size=25, image=website_img)
-                        seg_map_vis = np.hstack((website_img, labelviz_withname1))
-                        full_file_name = os.path.join(self.vis_dir, "vis_gt_{}".format(annotation["filename"]))
-                        cv2.imwrite(full_file_name, seg_map_vis)
-                    
-
+                seg_map = self.form_seg_map(annotation, saliency_map)
                 self.dataset.append( (annotation["filename"], website_img, seg_map, saliency_map, website_type)  )
+            
+            if self.vis:                       
+                saliency_map_rgb = cv2.cvtColor(saliency_map, cv2.COLOR_GRAY2RGB)
+                seg_map_visualization = visualize_seg_map(seg_map, website_img)
+                seg_map_vis = np.hstack((website_img, seg_map_visualization, saliency_map_rgb))
+                full_file_name = os.path.join(self.vis_dir, "vis_gt_{}".format(annotation["filename"]))
+                cv2.imwrite(full_file_name, seg_map_vis)
+            
         
 
     def process_eccv_data(self):
 
         category_count = {}
+        
         for i in self.eccv_categories:
             category_count[str(i)] = 0
-
-        for webpage in self.eccv_data:
-
-            
-            # Save imgs for annotations
-            web_jpg = webpage[0]
-            web_eye_gaze = webpage[1].squeeze(0)[0]
+      
+        
+        self.name_to_items_eecv = {}
+        for idx, webpage in enumerate(self.eccv_data):
             category = webpage[3]
-            
-            H, W, _ = web_jpg.shape
-            
-            web_eye_gaze = web_eye_gaze -  web_eye_gaze.min()
-            web_eye_gaze = web_eye_gaze / web_eye_gaze.max()
-            web_eye_gaze[:,0] *= W
-            web_eye_gaze[:,1] *= H
-
             category_count[str(i)] += 1
             count = str(category_count[str(i)])
+            basename = 'eccv_2015_{}_{}.jpg'.format(category[0], count)            
+            self.name_to_items_eecv[basename] = idx
 
-            basename = 'eccv_2015_{}_{}.jpg'.format(category[0], count), web_jpg
-
-            # TODO: grab the region annotations + build segm map
-    
+           
     def __len__(self):
         """
         Overwrite the len function to get the number of images in the dataset
