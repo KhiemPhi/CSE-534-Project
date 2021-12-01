@@ -9,7 +9,7 @@ from visualizer import get_sal_map, generate_mask_from_bbox
 from tqdm import tqdm
 
 from visualizer.vis_utils import visualize_seg_map
-
+from .data_augmentation import DataAugmentation
 
 sepearate_dataset_key = "eccv"
 website_type_dict = {1:"email",2:"fileshare",3:"job",4:"product", 5:"shopping", 6:"social", 7:"general"}
@@ -32,7 +32,6 @@ class WebSaliencyDataset(Dataset):
 
         #2. Parse the JSON file to get the correct annotations, we build a list of tuple that goes:
         # file_name, img, seg map, saliency map, website_type
-
         self.dataset = []     
 
         self.json_path = json_path
@@ -40,9 +39,15 @@ class WebSaliencyDataset(Dataset):
         self.saliency_dir = saliency_dir
         self.vis = vis
         self.vis_dir = vis_dir
+        self.transforms = DataAugmentation()
 
         self.process_eccv_data()
         self.process_annotations()
+
+        
+
+    def data_augmentation(self):
+        breakpoint()
     
     def form_seg_map(self, annotation, saliency_map):
         if len(annotation["regions"]) == 0: 
@@ -50,8 +55,7 @@ class WebSaliencyDataset(Dataset):
         else: 
             regions = annotation["regions"]
             seg_map = np.zeros_like(saliency_map) # empty seg map
-            seg_map = generate_mask_from_bbox(regions, seg_map, website_element_dict)
-                
+            seg_map = generate_mask_from_bbox(regions, seg_map, website_element_dict)               
         
         return seg_map
     
