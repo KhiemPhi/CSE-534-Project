@@ -10,6 +10,7 @@ class DataAugmentation(nn.Module):
         super().__init__()
         self.transforms = T.Compose([
             T.ToTensor()
+            # TODO: Normalize the images + add more data augmentation here
         ])
         
 

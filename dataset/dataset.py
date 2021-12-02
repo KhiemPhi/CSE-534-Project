@@ -71,6 +71,7 @@ class WebSaliencyDataset(Dataset):
                 webpage = self.eccv_data[idx]
 
                 website_img = webpage[0]
+                website_img = cv2.cvtColor(website_img, cv2.COLOR_BGR2RGB)
                 web_eye_gaze = webpage[1].squeeze(0)[0]
                 category = webpage[3][0]           
 
@@ -84,6 +85,7 @@ class WebSaliencyDataset(Dataset):
                 website_type = np.zeros(shape=len(website_type_dict.keys()))
                 website_type[website_type_dict_reverse[category]] = 1
                 seg_map = self.form_seg_map(annotation, saliency_map)
+               
                 self.dataset.append( (annotation["filename"], website_img, seg_map, saliency_map, website_type)  )
             
             else: 
