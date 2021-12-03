@@ -33,9 +33,10 @@ def GaussianMask(sizex,sizey, sigma=33, center=None,fix=1):
         return fix*np.exp(-4*np.log(2) * ((x-x0)**2 + (y-y0)**2) / sigma**2)
     
     
-def get_sal_map(fix_arr, H, W):
+def get_sal_map_heat(fix_arr, H, W):
     heatmap = np.zeros((H,W), np.float32)
     for n_subject in (range(fix_arr.shape[0])):
+        
         heatmap += GaussianMask(W, H, 33, (fix_arr[n_subject,0],fix_arr[n_subject,1]),
                                 fix_arr[n_subject,2])
 
@@ -45,6 +46,16 @@ def get_sal_map(fix_arr, H, W):
     heatmap = heatmap.astype("uint8")
 
     return heatmap
+
+def get_sal_map(fix_arr, H,W):
+    sal_map = np.zeros((H,W), np.float32)
+    for n_subject in (range(fix_arr.shape[0])):      
+        gaze_arr = fix_arr[n_subject]
+        y, x, gaze = gaze_arr[:,0], gaze_arr[:,1], gaze_arr[:,2]
+        sal_map[x,y] = 1
+   
+    return sal_map
+
 
 def Fixpos2Densemap(fix_arr, W, H, imgfile, alpha=0.9, threshold=255):
     """

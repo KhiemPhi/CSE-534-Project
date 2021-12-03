@@ -1,7 +1,11 @@
 {
-    "annotations_path": "annotations/tanmay_2.json",
+    "annotations_path": ["annotations/john.json", "annotations/tanmay.json"],
     "saliency_path":  "fdm_websaliency",
     "imgs_dir": "homepages",
-    "matlab_path":"dataset.mat"
+    "matlab_path":"dataset.mat",
+    "backbone_name": "resnet50",
+    "batch_size": 10,
+    "learning_rate": 1e-5,
+    "epochs": 150
 
 }
