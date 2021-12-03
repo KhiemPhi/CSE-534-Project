@@ -31,7 +31,7 @@ def main(args):
     model = SaliencyModel( backbone_name=cfg["backbone_name"], 
                             train_set=train_set,test_set=test_set, val_set=val_set, 
                             batch_size=cfg["batch_size"], learning_rate=cfg["learning_rate"]  )
-    trainer = Trainer(gpus=[1] if torch.cuda.is_available() else "cpu", 
+    trainer = Trainer(gpus=[args.gpu] if torch.cuda.is_available() else "cpu", 
                       max_epochs=cfg["epochs"], auto_select_gpus=True, benchmark=True,        
                       auto_lr_find=True, check_val_every_n_epoch=10, num_sanity_val_steps=0)
     #3. Train the model
@@ -44,15 +44,7 @@ if __name__ == "__main__":
     
     parser.add_argument("-cfg", "--config", type=str,
                         default='configs/base.json', help="Path to the config to train the model")   
-    parser.add_argument("-g", "--gpu", type=str,
-                        default='0', help="GPU to use")
-    parser.add_argument("-b", "--batch", type=int,
-                        default=5, help="batch size to use")
-    parser.add_argument("-lr", "--learning_rate", type=float,
-                        default=1e-3, help="batch size to use")
-    parser.add_argument("-ep", "--epochs", type=int,
-                        default=20, help="batch size to use")    
- 
- 
+    parser.add_argument("-g", "--gpu", type=int,
+                        default=1, help="GPU to use")    
     args = parser.parse_args()
     main(args)

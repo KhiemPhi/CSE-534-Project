@@ -4,9 +4,8 @@
     "imgs_dir": "homepages",
     "matlab_path":"dataset.mat",
     "backbone_name": "resnet50",
-    "batch_size": 10,
+    "batch_size": 5,
     "learning_rate": 1e-5,
-    "epochs": 80
+    "epochs": 150
 
 }
-
