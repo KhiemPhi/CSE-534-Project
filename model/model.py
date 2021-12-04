@@ -35,7 +35,7 @@ class SaliencyModel(pl.LightningModule):
         self.val_set = val_set
         self.batch_size = batch_size    
         self.learning_rate = learning_rate
-        self.fcn_head = DeepLabHead(in_channels=2048, num_classes=5) #FCNHead(in_channels=2048, out_channels=5)
+        self.fcn_head = FCNHead(in_channels=2048, out_channels=5)
         self.task_specific_subnet = TaskSpecificSubnet()
 
         self.sal_loss_fn = nn.MSELoss(reduction='mean')
@@ -98,6 +98,7 @@ class SaliencyModel(pl.LightningModule):
         return [opt], [sch] 
 
     def forward(self, img_batch, seg_map, saliency_map, website_type):  
+        
         input_shape = img_batch.shape[-2:]
         features = self.backbone(img_batch) 
         fcn_out = self.fcn_head(features)
@@ -106,6 +107,7 @@ class SaliencyModel(pl.LightningModule):
 
         #1. Subnet #1: Segmentation subnet with task specific encoder
         seg_map_pred = interp_out.argmax(1)
+       
         task_specific_attn_shift  = self.task_specific_subnet(seg_map_pred.unsqueeze(1).to(torch.float), website_type.to(torch.float))
 
         #2. Subnet #2: Task Free Saliency Prediction 
@@ -156,7 +158,13 @@ class SaliencyModel(pl.LightningModule):
 
         #1. Subnet #1: Segmentation subnet with task specific encoder
         seg_map_pred = interp_out.argmax(1)
+       
+
         self.confmat.update(seg_map.flatten(), seg_map_pred.flatten())
+
+        #TODO: Visualize all these examples
+
+      
 
         self.summarize_results()
         
@@ -185,6 +193,8 @@ class SaliencyModel(pl.LightningModule):
         #1. Subnet #1: Segmentation subnet with task specific encoder
         seg_map_pred = interp_out.argmax(1)
         self.confmat.update(seg_map.flatten(), seg_map_pred.flatten())
+
+        #TODO: Visualize all these examples
 
         self.summarize_results()
         

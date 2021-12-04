@@ -1,5 +1,5 @@
 {
-    "annotations_path": ["annotations/john.json", "annotations/tanmay.json"],
+    "annotations_path": ["annotations/john.json"],
     "saliency_path":  "fdm_websaliency",
     "imgs_dir": "homepages",
     "matlab_path":"dataset.mat",

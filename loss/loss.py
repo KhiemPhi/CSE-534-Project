@@ -24,7 +24,7 @@ class ClassBalancedFocalLoss(nn.Module):
         self.alpha = self.alpha / torch.sum(self.alpha) * 5
         
         loss = F.cross_entropy(logits, target, weight=self.alpha,
-                               ignore_index=-100, reduction='mean',
+                               ignore_index=0, reduction='mean',
                                )
        
        

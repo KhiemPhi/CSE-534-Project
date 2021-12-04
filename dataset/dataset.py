@@ -12,6 +12,7 @@ import torch
 from visualizer.vis_utils import visualize_seg_map
 from .data_augmentation import DataAugmentation, SegMapResizer
 import torchvision.transforms as T
+import random
 
 
 sepearate_dataset_key = "eccv"
@@ -72,6 +73,8 @@ class WebSaliencyDataset(Dataset):
             annotation_file = open(path)
             annotation_dict = json.load(annotation_file)
             annotation_values.extend(list(annotation_dict.values()))
+        
+        random.shuffle(annotation_values)
 
         if self.mode == 'train':
             annotation_values = annotation_values[0: int( len(annotation_values) * 0.6 ) ]
@@ -107,6 +110,8 @@ class WebSaliencyDataset(Dataset):
                 website_type[website_type_dict_reverse[category]] = 1
                 seg_map = self.form_seg_map(annotation, saliency_map)
                 seg_map = cv2.resize(seg_map, dsize=(1040,1040))  
+               
+
                 mean += website_img.mean(axis=(0,1))
                 std +=  website_img.std(axis=(0,1))
             
@@ -118,7 +123,8 @@ class WebSaliencyDataset(Dataset):
                 saliency_map = cv2.imread(saliency_map_path, flags=cv2.IMREAD_GRAYSCALE)
                 website_img = cv2.imread(website_path)
                 seg_map = self.form_seg_map(annotation, saliency_map)  
-                seg_map = cv2.resize(seg_map, dsize=(1040,1040))             
+                seg_map = cv2.resize(seg_map, dsize=(1040,1040))  
+                      
                 mean += website_img.mean(axis=(0,1))
                 std +=  website_img.std(axis=(0,1))
                
