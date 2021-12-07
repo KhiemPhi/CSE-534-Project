@@ -4,3 +4,8 @@
 /vis_gt
 dataset.mat
 /lightning_logs
+/checkpoints
+/general_browsing
+/news
+/testing
+/shopping
