@@ -11,6 +11,13 @@ from .deeplab import DeepLabHead
 from loss import ClassBalancedFocalLoss
 
 from metrics import ConfusionMatrix, MetricLogger
+from torchmetrics.functional import pearson_corrcoef
+
+import torchvision 
+import torchvision.transforms as T
+import numpy as np
+import cv2
+from PIL import Image 
 
 def collate_fn(batch):
     """
@@ -39,7 +46,9 @@ class SaliencyModel(pl.LightningModule):
         self.task_specific_subnet = TaskSpecificSubnet()
 
         self.sal_loss_fn = nn.MSELoss(reduction='mean')
-        self.seg_loss_fn = ClassBalancedFocalLoss(beta=0.9, gamma=0.05)
+        self.seg_loss_fn =  ClassBalancedFocalLoss(beta=0.9, gamma=0.5)
+        self.batch_num = 0
+        self.CC = 0
        
     
     def setup_testing(self):
@@ -62,7 +71,7 @@ class SaliencyModel(pl.LightningModule):
                 (3) collate_fn: To gather all the batches
                 (4) pin_memory: True to increase performance
         """
-        return DataLoader(self.train_set, batch_size=self.batch_size, shuffle=True, num_workers=20, pin_memory=True, collate_fn=collate_fn)       
+        return DataLoader(self.train_set, batch_size=self.batch_size, shuffle=True, num_workers=5, pin_memory=True, collate_fn=collate_fn)       
     def val_dataloader(self):
         """
             Returns the train data-loader, MANDATORY for PyTorch-Lightning to work.
@@ -71,7 +80,7 @@ class SaliencyModel(pl.LightningModule):
                 (3) collate_fn: To gather all the batches
                 (4) pin_memory: True to increase performance
         """
-        return DataLoader(self.val_set, batch_size=self.batch_size, shuffle=False, num_workers=20, pin_memory=True, collate_fn=collate_fn)    
+        return DataLoader(self.val_set, batch_size=self.batch_size, shuffle=False, num_workers=5, pin_memory=True, collate_fn=collate_fn)    
     def test_dataloader(self):
         """
             Returns the train data-loader, MANDATORY for PyTorch-Lightning to work.
@@ -80,7 +89,7 @@ class SaliencyModel(pl.LightningModule):
                 (3) collate_fn: To gather all the batches
                 (4) pin_memory: True to increase performance
         """
-        return DataLoader(self.test_set, batch_size=self.batch_size, shuffle=False, num_workers=20, pin_memory=True, collate_fn=collate_fn)    
+        return DataLoader(self.test_set, batch_size=self.batch_size, shuffle=False, num_workers=5, pin_memory=True, collate_fn=collate_fn)    
 
     def configure_optimizers(self):   
         """
@@ -136,11 +145,13 @@ class SaliencyModel(pl.LightningModule):
         self.log("seg-loss", seg_loss,  on_step=False, on_epoch=True, prog_bar=True, logger=True)
         self.log("sal-loss", sal_loss,  on_step=False, on_epoch=True, prog_bar=True, logger=True)
         
+        
         return multi_loss
 
 
     def on_validation_start(self):
         self.setup_testing()
+        self.batch_num = 0
     
     def validation_step(self,  batch: dict, _batch_idx: int):
         filename, website_img, seg_map, saliency_map, website_type = batch
@@ -158,42 +169,129 @@ class SaliencyModel(pl.LightningModule):
         seg_map_pred = interp_out.argmax(1)
         self.confmat.update(seg_map.flatten(), seg_map_pred.flatten())
 
+        task_specific_attn_shift  = self.task_specific_subnet(seg_map_pred.unsqueeze(1).to(torch.float), website_type.to(torch.float))
+
+        #2. Subnet #2: Task Free Saliency Prediction 
+        task_free_sal = interp_out.amax(1).unsqueeze(1).to(torch.float)
+       
+        #3. Combine two saliency maps to form final saliency map and do L2 Loss w/ respect to gt saliency map        
+        unified_atn_map = task_specific_attn_shift + task_free_sal  
+        unified_atn_map = unified_atn_map.squeeze(1)
+
+        self.CC += pearson_corrcoef(unified_atn_map.flatten(), saliency_map.flatten())
+        self.batch_num += 1
+
         self.summarize_results()
         
         return features
     
     def on_validation_epoch_end(self):  
         self.summarize_results()
-        self.log('mean-IOU', torch.tensor([self.mean_iou]), prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True)
-        self.log('global_acc', torch.tensor(self.acc_global), prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        self.log('mean-IOU', self.mean_iou, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        
+        self.log('mean-CC', self.CC/self.batch_num, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True)
     
     def on_test_start(self):
         self.setup_testing()
     
     def test_step(self,  batch: dict, _batch_idx: int):
-        filename, website_img, seg_map, saliency_map, website_type = batch
-        website_img = torch.stack(website_img)
-        seg_map = torch.stack(seg_map)
-        saliency_map = torch.stack(saliency_map)
-        website_type = torch.stack(website_type)
 
-        input_shape = website_img.shape[-2:]
-        features = self.backbone(website_img) 
-        fcn_out = self.fcn_head(features)
-        interp_out = F.interpolate(fcn_out, size=input_shape, mode="nearest")
-
-        #1. Subnet #1: Segmentation subnet with task specific encoder
-        seg_map_pred = interp_out.argmax(1)
-        self.confmat.update(seg_map.flatten(), seg_map_pred.flatten())
-
-        self.summarize_results()
+        if len(batch) == 3:
+            
+            filename, website_img,  website_type = batch
+            website_img = torch.stack(website_img)
         
-        return features
+            website_type = torch.stack(website_type)
+
+            input_shape = website_img.shape[-2:]
+            features = self.backbone(website_img) 
+            fcn_out = self.fcn_head(features)
+            interp_out = F.interpolate(fcn_out, size=input_shape, mode="nearest")
+
+            #1. Subnet #1: Segmentation subnet with task specific encoder
+            seg_map_pred = interp_out.argmax(1)    
+            task_specific_attn_shift  = self.task_specific_subnet(seg_map_pred.unsqueeze(1).to(torch.float), website_type.to(torch.float))
+
+            #2. Subnet #2: Task Free Saliency Prediction 
+            task_free_sal = interp_out.amax(1).unsqueeze(1).to(torch.float)
+        
+            #3. Combine two saliency maps to form final saliency map and do L2 Loss w/ respect to gt saliency map        
+            unified_atn_map = task_specific_attn_shift + task_free_sal  
+            unified_atn_map = unified_atn_map.squeeze(1)  
+
+            test_map = None
+
+            for img, atn_map, name in zip(website_img, unified_atn_map, filename):  
+                atn_map = torch.abs(atn_map)
+                atn_map /= torch.max(atn_map)
+                atn_map[torch.where(atn_map < 0.6)] = 0
+                grayscale = atn_map * 255
+                grayscale_img = cv2.cvtColor(grayscale.cpu().numpy(), cv2.COLOR_GRAY2RGB)
+                img = cv2.imread(name)
+                img = cv2.resize(img, (1040,1040))
+                stack = np.hstack((grayscale_img, img))
+                cv2.imwrite(name[:-4]+"_combine.jpg", stack)
+                
+                fixation_map = torch.vstack(torch.where(grayscale!=0)).T
+                values = atn_map[ fixation_map[:,0], fixation_map[:, 1]].unsqueeze(0).T           
+                values = torch.abs(values)      
+                values /= torch.max(values)
+
+                fix_w_values = torch.hstack((fixation_map, values))
+                fix_w_values = fix_w_values[fix_w_values[:, 0].sort(descending=False)[1]]
+                fix_w_values = fix_w_values.cpu().numpy()
+                fix_filename = name[:-4] + ".npy"
+                np.save(fix_filename, fix_w_values)
+                self.mean_iou = 0
+                self.CC = 0
+
+        else:
+            filename, website_img, seg_map, saliency_map, website_type = batch
+
+            website_img = torch.stack(website_img)
+            seg_map = torch.stack(seg_map)
+            saliency_map = torch.stack(saliency_map)
+            website_type = torch.stack(website_type)
+
+            input_shape = website_img.shape[-2:]
+            features = self.backbone(website_img) 
+            fcn_out = self.fcn_head(features)
+            interp_out = F.interpolate(fcn_out, size=input_shape, mode="nearest")
+
+            #1. Subnet #1: Segmentation subnet with task specific encoder
+            seg_map_pred = interp_out.argmax(1)
+            self.confmat.update(seg_map.flatten(), seg_map_pred.flatten())
+
+            task_specific_attn_shift  = self.task_specific_subnet(seg_map_pred.unsqueeze(1).to(torch.float), website_type.to(torch.float))
+
+            #2. Subnet #2: Task Free Saliency Prediction 
+            task_free_sal = interp_out.amax(1).unsqueeze(1).to(torch.float)
+        
+            #3. Combine two saliency maps to form final saliency map and do L2 Loss w/ respect to gt saliency map        
+            unified_atn_map = task_specific_attn_shift + task_free_sal  
+            unified_atn_map = unified_atn_map.squeeze(1)
+            unified_atn_map = torch.abs(unified_atn_map)
+            unified_atn_map /= torch.max(unified_atn_map)
+            unified_atn_map[torch.where(unified_atn_map < 0.3)] = 0
+            unified_atn_map[torch.where(unified_atn_map !=0)] = 255
+
+            
+            
+
+            self.CC += pearson_corrcoef(unified_atn_map.flatten(), saliency_map.flatten())
+            self.batch_num += 1
+
+            self.summarize_results()
+                
+        
+       
     
     def on_test_epoch_end(self):  
         self.summarize_results()
-        self.log('mean-IOU', torch.tensor([self.mean_iou]), prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True)
-        self.log('global_acc', torch.tensor(self.acc_global), prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        self.log('mean-IOU', self.mean_iou, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True)        
+        self.log('mean-CC', self.CC/self.batch_num, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        
+        
     
     
 

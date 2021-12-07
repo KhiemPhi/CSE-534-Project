@@ -21,6 +21,48 @@ website_element_dict = {"Background":0, "Button":1, "Text":2, "Input Field":3, "
 website_element_dict_reverse = {value: key for key, value in website_element_dict.items()}
 
 
+class CustomWebSaliencyDataset(Dataset):
+
+    def __init__(self, folder, task):
+        super().__init__()
+        self.folder = folder 
+        self.task = task 
+        self.dataset = []
+
+        self.process_data()
+    
+    def process_data(self):
+
+        paths = [ os.path.join(self.folder, x) for x in os.listdir(self.folder)]
+        mean = np.array([0,0,0]).astype(np.float64)
+        std = np.array([0,0,0]).astype(np.float64)
+
+        for path in paths: 
+            if ".png" in path or ".jpg" in path:
+                website_img = cv2.imread(path)
+                website_type = np.zeros(shape=len(website_type_dict.keys()))
+                website_type[self.task] = 1
+                self.dataset.append((path, website_img, website_type))
+                mean += website_img.mean(axis=(0,1))
+                std +=  website_img.std(axis=(0,1))
+        
+        self.mean = mean /len(paths)
+        self.std = std / len(paths)
+      
+        self.transforms = DataAugmentation(mean=self.mean, std=self.std)
+        self.dataset = [  (x[0], T.Resize((1040,1040))(T.ToTensor()(x[1])), torch.from_numpy(x[2])) for x in self.dataset]
+    
+    def __len__(self):
+        """
+        Overwrite the len function to get the number of images in the dataset
+        """
+        return len(self.dataset)
+
+    def __getitem__(self, idx:int):
+        return self.dataset[idx]
+    
+
+
 class WebSaliencyDataset(Dataset):
 
     def __init__(self, matlab_path, json_path, imgs_dir, saliency_dir, vis=True, vis_dir="vis_gt", mode='train'):
@@ -49,7 +91,7 @@ class WebSaliencyDataset(Dataset):
         self.process_eccv_data()
         self.process_annotations()   
         self.data_augmentation()
-
+       
     def data_augmentation(self):       
         self.dataset = [  (x[0], self.transforms(x[1]), x[2], self.seg_map_resizer(x[3]), x[4]) for x in self.dataset]
        
@@ -109,6 +151,8 @@ class WebSaliencyDataset(Dataset):
                 seg_map = cv2.resize(seg_map, dsize=(1040,1040))  
                 mean += website_img.mean(axis=(0,1))
                 std +=  website_img.std(axis=(0,1))
+
+               
             
             else: 
                 # ----> souradeep dataset                
@@ -121,6 +165,7 @@ class WebSaliencyDataset(Dataset):
                 seg_map = cv2.resize(seg_map, dsize=(1040,1040))             
                 mean += website_img.mean(axis=(0,1))
                 std +=  website_img.std(axis=(0,1))
+                
                
             '''
             if self.vis:                       
@@ -136,11 +181,14 @@ class WebSaliencyDataset(Dataset):
             self.dataset.append( (annotation["filename"], website_img, seg_map, saliency_map, website_type)  )
             
             
+            
         
         self.mean = mean / len(annotation_dict.values()) 
-        self.std = std / len(annotation_dict.values()) 
-      
+        self.std = std / len(annotation_dict.values())       
         self.transforms = DataAugmentation(mean=self.mean, std=self.std)
+
+            
+       
          
 
     def process_eccv_data(self):
